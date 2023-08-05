@@ -17,20 +17,29 @@ EXCLUDED_WORDS = ["The", "the", "A", "a", "of", "Grid"]
 
 
 @limiter.ratelimit("identity", delay=True)
-def get_card_image(id):
-    return requests.get(f"https://static.nrdbassets.com/v1/large/{id}.jpg").content
+def get_card_image(card: dict):
+    return requests.get(card["attributes"]["images"]["nrdb_classic"]["large"]).content
 
 
-def update_cards():
+def update_cards(
+    printings_url: str = "https://api-preview.netrunnerdb.com/api/v3/public/printings",
+):
     if not os.path.isdir("cardimages"):
         os.mkdir("cardimages")
-    cards = requests.get("https://netrunnerdb.com/api/2.0/public/cards").json()["data"]
+    response = requests.get(printings_url)
+    if response.status_code != 200:
+        print("Error: ", response.status_code)
+        sys.exit(1)
+    page = response.json()
+    cards = page["data"]
     for card in cards:
-        if os.path.exists(f"cardimages/{card['code']}.jpg"):
+        if os.path.exists(f"cardimages/{card['id']}.jpg"):
             continue
-        print(card["code"])
-        with open(f"cardimages/{card['code']}.jpg", "wb") as f:
-            f.write(get_card_image(card["code"]))
+        print(card["id"])
+        with open(f"cardimages/{card['id']}.jpg", "wb") as f:
+            f.write(get_card_image(card))
+    if "next" in page["links"].keys():
+        update_cards(page["links"]["next"])
 
 
 def card_dictionary(refresh: bool = False) -> dict:
@@ -41,7 +50,7 @@ def card_dictionary(refresh: bool = False) -> dict:
         return cards
 
     cards = requests.get("https://netrunnerdb.com/api/2.0/public/cards").json()["data"]
-    cards = {c["title"]: c["code"] for c in cards}
+    cards = {c["stripped_title"]: c["code"] for c in cards}
 
     with open("cards.json", "w") as f:
         f.write(json.dumps(cards))
@@ -88,10 +97,13 @@ def convert_images(dir: str):
 
 
 if __name__ == "__main__":
+
     cards = card_dictionary()
+    overwrite_mode = input("Enable Overwrite Mode (T/F)?")
+    overwrite_mode = overwrite_mode.lower() == "t"
     card_pull(
         cards=cards,
-        project_folder="C:/Users/jeffp/Videos/Streaming/Parhelion/CBI_Numbers",
-        overwrite=False,
+        project_folder="C:/Users/jeffp/Videos/Streaming/AutomataInitiative/SpoilerVid",
+        overwrite=overwrite_mode,
     )
     # convert_images("ParhelionImages")
